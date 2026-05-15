@@ -68,26 +68,17 @@ def safe_insert(document):
 # ---------------------------
 # SIMULATOR LOOP (PRODUCTION SAFE)
 # ---------------------------
-def run_simulator():
-
-    print("🚀 Simulator started (production mode)")
+def run_simulator_forever():
+    print("Simulator started...")
 
     drones = create_initial_drones()
     start_time = time.time()
 
     while True:
-
         try:
-            # Reset every 15 minutes
-            if time.time() - start_time > RESET_INTERVAL:
-                print("♻ Resetting system...")
-                collection.delete_many({})
-                drones = create_initial_drones()
-                start_time = time.time()
 
             for drone in drones:
 
-                # Movement
                 drone["lat"] += (TOKYO_LAT - drone["lat"]) * 0.01
                 drone["lon"] += (TOKYO_LON - drone["lon"]) * 0.01
 
@@ -96,73 +87,34 @@ def run_simulator():
                     drone["speed"] = 50
 
                 distance = calculate_distance(
-                    drone["lat"],
-                    drone["lon"],
-                    TOKYO_LAT,
-                    TOKYO_LON
+                    drone["lat"], drone["lon"],
+                    TOKYO_LAT, TOKYO_LON
                 )
 
                 eta = (distance / drone["speed"]) * 60
 
-                # Threat logic
-                if distance < 20:
-                    threat = "Critical"
-                elif distance < 50:
-                    threat = "High"
-                elif distance < 100:
-                    threat = "Medium"
-                else:
-                    threat = "Low"
-
-                document = {
+                collection.insert_one({
                     "drone_id": drone["drone_id"],
                     "timestamp": datetime.utcnow(),
+                    "latitude": drone["lat"],
+                    "longitude": drone["lon"],
+                    "speed_kmh": drone["speed"],
+                    "distance_to_tokyo_km": distance,
+                    "eta_minutes": eta
+                })
 
-                    "latitude": round(drone["lat"], 6),
-                    "longitude": round(drone["lon"], 6),
+                print("Inserted:", drone["drone_id"])
 
-                    "speed_kmh": round(drone["speed"], 2),
-                    "altitude_m": random.randint(100, 1200),
-
-                    "distance_to_tokyo_km": round(distance, 2),
-                    "eta_minutes": round(eta, 2),
-
-                    "threat_level": threat,
-                    "threat_score": random.randint(1, 100),
-
-                    "drone_type": random.choice([
-                        "Commercial", "Unknown", "Military",
-                        "Hobby", "Autonomous"
-                    ]),
-
-                    "signal_strength": random.randint(60, 100),
-                    "battery_level": random.randint(20, 100),
-
-                    "restricted_zone": random.choice([True, False]),
-                    "intercept_status": random.choice([
-                        "Monitoring", "Tracking", "Intercepted", "Escaped"
-                    ])
-                }
-
-                safe_insert(document)
-
-            time.sleep(WRITE_INTERVAL)
+            time.sleep(2)
 
         except Exception as e:
-            print("SIMULATOR LOOP ERROR:", e)
+            print("Error:", e)
             time.sleep(3)
 
-# ---------------------------
-# BACKGROUND START (RENDER SAFE)
-# ---------------------------
-def start_simulator():
-    thread = Thread(target=run_simulator, daemon=True)
-    thread.start()
 
-start_simulator()
+# IMPORTANT: start simulator BEFORE Flask blocks
+from threading import Thread
+Thread(target=run_simulator_forever, daemon=True).start()
 
-# ---------------------------
-# RENDER WEB SERVICE
-# ---------------------------
 port = int(os.environ.get("PORT", 10000))
 app.run(host="0.0.0.0", port=port)
