@@ -4,9 +4,17 @@ import random
 import time
 import math
 import os
+from flask import Flask
+from threading import Thread
+
+# Flask app
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Drone simulator running"
 
 # MongoDB Atlas connection
-# MONGO_URI = "mongodb+srv://janaka:Jan123@cluster0.asjsuwa.mongodb.net/?retryWrites=true&w=majority"
 MONGO_URI = os.getenv("MONGO_URI")
 
 client = MongoClient(MONGO_URI)
@@ -44,84 +52,96 @@ def create_initial_drones():
         }
     ]
 
-# Create initial drone list
-drones = create_initial_drones()
-
-# Start timer
-start_time = time.time()
-
 # Distance calculation
 def calculate_distance(lat1, lon1, lat2, lon2):
     return math.sqrt((lat2 - lat1) ** 2 + (lon2 - lon1) ** 2) * 111
 
-while True:
+# Simulator function
+def run_simulator():
 
-    # Reset system every 15 minutes
-    if time.time() - start_time > RESET_INTERVAL:
+    # Create initial drone list
+    drones = create_initial_drones()
 
-        print("Resetting system...")
+    # Start timer
+    start_time = time.time()
 
-        # Delete old telemetry data
-        collection.delete_many({})
+    while True:
 
-        # Reset drones
-        drones = create_initial_drones()
+        # Reset system every 15 minutes
+        if time.time() - start_time > RESET_INTERVAL:
 
-        # Restart timer
-        start_time = time.time()
+            print("Resetting system...")
 
-        print("System reset completed")
+            # Delete old telemetry data
+            collection.delete_many({})
 
-    for drone in drones:
+            # Reset drones
+            drones = create_initial_drones()
 
-        # Move drone toward Tokyo
-        drone["lat"] += (TOKYO_LAT - drone["lat"]) * 0.01
-        drone["lon"] += (TOKYO_LON - drone["lon"]) * 0.01
+            # Restart timer
+            start_time = time.time()
 
-        # Random speed variation
-        drone["speed"] += random.uniform(-2, 2)
+            print("System reset completed")
 
-        # Prevent negative speed
-        if drone["speed"] < 50:
-            drone["speed"] = 50
+        for drone in drones:
 
-        distance = calculate_distance(
-            drone["lat"],
-            drone["lon"],
-            TOKYO_LAT,
-            TOKYO_LON
-        )
+            # Move drone toward Tokyo
+            drone["lat"] += (TOKYO_LAT - drone["lat"]) * 0.01
+            drone["lon"] += (TOKYO_LON - drone["lon"]) * 0.01
 
-        # ETA calculation
-        eta = (distance / drone["speed"]) * 60
+            # Random speed variation
+            drone["speed"] += random.uniform(-2, 2)
 
-        # Threat level logic
-        threat = "Low"
+            # Prevent negative speed
+            if drone["speed"] < 50:
+                drone["speed"] = 50
 
-        if distance < 20:
-            threat = "Critical"
-        elif distance < 50:
-            threat = "High"
-        elif distance < 100:
-            threat = "Medium"
+            distance = calculate_distance(
+                drone["lat"],
+                drone["lon"],
+                TOKYO_LAT,
+                TOKYO_LON
+            )
 
-        # Create telemetry document
-        document = {
-            "drone_id": drone["drone_id"],
-            "timestamp": datetime.utcnow(),
-            "latitude": round(drone["lat"], 6),
-            "longitude": round(drone["lon"], 6),
-            "speed_kmh": round(drone["speed"], 2),
-            "distance_to_tokyo_km": round(distance, 2),
-            "eta_minutes": round(eta, 2),
-            "threat_level": threat
-        }
+            # ETA calculation
+            eta = (distance / drone["speed"]) * 60
 
-        # Insert into MongoDB
-        collection.insert_one(document)
+            # Threat level logic
+            threat = "Low"
 
-        # Print output
-        print(document)
+            if distance < 20:
+                threat = "Critical"
+            elif distance < 50:
+                threat = "High"
+            elif distance < 100:
+                threat = "Medium"
 
-    # Wait 1 second before next update
-    time.sleep(1)
+            # Create telemetry document
+            document = {
+                "drone_id": drone["drone_id"],
+                "timestamp": datetime.utcnow(),
+                "latitude": round(drone["lat"], 6),
+                "longitude": round(drone["lon"], 6),
+                "speed_kmh": round(drone["speed"], 2),
+                "distance_to_tokyo_km": round(distance, 2),
+                "eta_minutes": round(eta, 2),
+                "threat_level": threat
+            }
+
+            # Insert into MongoDB
+            collection.insert_one(document)
+
+            # Print output
+            print(document)
+
+        # Wait 1 second before next update
+        time.sleep(1)
+
+# Start simulator in background thread
+simulator_thread = Thread(target=run_simulator)
+simulator_thread.start()
+
+# Render port binding
+port = int(os.environ.get("PORT", 10000))
+
+app.run(host="0.0.0.0", port=port)
