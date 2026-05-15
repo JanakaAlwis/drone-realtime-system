@@ -120,12 +120,51 @@ def run_simulator():
             document = {
                 "drone_id": drone["drone_id"],
                 "timestamp": datetime.utcnow(),
+
+                # Location
                 "latitude": round(drone["lat"], 6),
                 "longitude": round(drone["lon"], 6),
+                "city_target": random.choice([
+                    "Tokyo",
+                    "Osaka",
+                    "Yokohama"
+                ]),
+
+                # Movement
                 "speed_kmh": round(drone["speed"], 2),
+                "altitude_m": random.randint(100, 1200),
                 "distance_to_tokyo_km": round(distance, 2),
                 "eta_minutes": round(eta, 2),
-                "threat_level": threat
+
+                # Threat
+                "threat_level": threat,
+                "threat_score": random.randint(1, 100),
+                "payload_risk": random.randint(1, 10),
+                "restricted_zone": random.choice([True, False]),
+
+                # Drone intelligence
+                "drone_type": random.choice([
+                    "Commercial",
+                    "Unknown",
+                    "Military",
+                    "Hobby",
+                    "Autonomous"
+                ]),
+
+                # Technical telemetry
+                "signal_strength": random.randint(60, 100),
+                "battery_level": random.randint(20, 100),
+
+                # Security operations
+                "detection_confidence": round(random.uniform(70, 99), 2),
+                "response_time_sec": random.randint(10, 300),
+
+                "intercept_status": random.choice([
+                    "Monitoring",
+                    "Tracking",
+                    "Intercepted",
+                    "Escaped"
+                ])
             }
 
             # Insert into MongoDB
