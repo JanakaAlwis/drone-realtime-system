@@ -7,180 +7,163 @@ import os
 from flask import Flask
 from threading import Thread
 
-# Flask app
+# ---------------------------
+# Flask app (Render requires open port)
+# ---------------------------
 app = Flask(__name__)
 
 @app.route("/")
 def home():
     return "Drone simulator running"
 
-# MongoDB Atlas connection
+# ---------------------------
+# MongoDB connection
+# ---------------------------
 MONGO_URI = os.getenv("MONGO_URI")
+
+if not MONGO_URI:
+    print("ERROR: MONGO_URI not set")
 
 client = MongoClient(MONGO_URI)
 
 db = client["drone_monitoring"]
 collection = db["drone_telemetry"]
 
+# ---------------------------
 # Tokyo coordinates
+# ---------------------------
 TOKYO_LAT = 35.6764
 TOKYO_LON = 139.6500
 
 # Reset every 15 minutes
-RESET_INTERVAL = 900  # seconds
+RESET_INTERVAL = 900
 
-# Function to create initial drones
+# ---------------------------
+# Drone setup
+# ---------------------------
 def create_initial_drones():
     return [
-        {
-            "drone_id": "DR001",
-            "lat": 36.5000,
-            "lon": 141.2000,
-            "speed": 120
-        },
-        {
-            "drone_id": "DR002",
-            "lat": 35.9000,
-            "lon": 140.8000,
-            "speed": 100
-        },
-        {
-            "drone_id": "DR003",
-            "lat": 36.1000,
-            "lon": 140.3000,
-            "speed": 140
-        }
+        {"drone_id": "DR001", "lat": 36.5000, "lon": 141.2000, "speed": 120},
+        {"drone_id": "DR002", "lat": 35.9000, "lon": 140.8000, "speed": 100},
+        {"drone_id": "DR003", "lat": 36.1000, "lon": 140.3000, "speed": 140}
     ]
 
-# Distance calculation
 def calculate_distance(lat1, lon1, lat2, lon2):
     return math.sqrt((lat2 - lat1) ** 2 + (lon2 - lon1) ** 2) * 111
 
-# Simulator function
+# ---------------------------
+# Simulator
+# ---------------------------
 def run_simulator():
 
-    # Create initial drone list
-    drones = create_initial_drones()
+    print("Simulator started...")
 
-    # Start timer
+    drones = create_initial_drones()
     start_time = time.time()
 
     while True:
 
-        # Reset system every 15 minutes
-        if time.time() - start_time > RESET_INTERVAL:
+        try:
 
-            print("Resetting system...")
+            # Reset every 15 minutes
+            if time.time() - start_time > RESET_INTERVAL:
+                print("Resetting system...")
+                collection.delete_many({})
+                drones = create_initial_drones()
+                start_time = time.time()
 
-            # Delete old telemetry data
-            collection.delete_many({})
+            for drone in drones:
 
-            # Reset drones
-            drones = create_initial_drones()
+                drone["lat"] += (TOKYO_LAT - drone["lat"]) * 0.01
+                drone["lon"] += (TOKYO_LON - drone["lon"]) * 0.01
 
-            # Restart timer
-            start_time = time.time()
+                drone["speed"] += random.uniform(-2, 2)
+                if drone["speed"] < 50:
+                    drone["speed"] = 50
 
-            print("System reset completed")
+                distance = calculate_distance(
+                    drone["lat"],
+                    drone["lon"],
+                    TOKYO_LAT,
+                    TOKYO_LON
+                )
 
-        for drone in drones:
+                eta = (distance / drone["speed"]) * 60
 
-            # Move drone toward Tokyo
-            drone["lat"] += (TOKYO_LAT - drone["lat"]) * 0.01
-            drone["lon"] += (TOKYO_LON - drone["lon"]) * 0.01
+                if distance < 20:
+                    threat = "Critical"
+                elif distance < 50:
+                    threat = "High"
+                elif distance < 100:
+                    threat = "Medium"
+                else:
+                    threat = "Low"
 
-            # Random speed variation
-            drone["speed"] += random.uniform(-2, 2)
+                document = {
+                    "drone_id": drone["drone_id"],
+                    "timestamp": datetime.utcnow(),
 
-            # Prevent negative speed
-            if drone["speed"] < 50:
-                drone["speed"] = 50
+                    "latitude": round(drone["lat"], 6),
+                    "longitude": round(drone["lon"], 6),
 
-            distance = calculate_distance(
-                drone["lat"],
-                drone["lon"],
-                TOKYO_LAT,
-                TOKYO_LON
-            )
+                    "city_target": random.choice(["Tokyo", "Osaka", "Yokohama"]),
 
-            # ETA calculation
-            eta = (distance / drone["speed"]) * 60
+                    "speed_kmh": round(drone["speed"], 2),
+                    "altitude_m": random.randint(100, 1200),
+                    "distance_to_tokyo_km": round(distance, 2),
+                    "eta_minutes": round(eta, 2),
 
-            # Threat level logic
-            threat = "Low"
+                    "threat_level": threat,
+                    "threat_score": random.randint(1, 100),
+                    "payload_risk": random.randint(1, 10),
+                    "restricted_zone": random.choice([True, False]),
 
-            if distance < 20:
-                threat = "Critical"
-            elif distance < 50:
-                threat = "High"
-            elif distance < 100:
-                threat = "Medium"
+                    "drone_type": random.choice([
+                        "Commercial",
+                        "Unknown",
+                        "Military",
+                        "Hobby",
+                        "Autonomous"
+                    ]),
 
-            # Create telemetry document
-            document = {
-                "drone_id": drone["drone_id"],
-                "timestamp": datetime.utcnow(),
+                    "signal_strength": random.randint(60, 100),
+                    "battery_level": random.randint(20, 100),
 
-                # Location
-                "latitude": round(drone["lat"], 6),
-                "longitude": round(drone["lon"], 6),
-                "city_target": random.choice([
-                    "Tokyo",
-                    "Osaka",
-                    "Yokohama"
-                ]),
+                    "detection_confidence": round(random.uniform(70, 99), 2),
+                    "response_time_sec": random.randint(10, 300),
 
-                # Movement
-                "speed_kmh": round(drone["speed"], 2),
-                "altitude_m": random.randint(100, 1200),
-                "distance_to_tokyo_km": round(distance, 2),
-                "eta_minutes": round(eta, 2),
+                    "intercept_status": random.choice([
+                        "Monitoring",
+                        "Tracking",
+                        "Intercepted",
+                        "Escaped"
+                    ])
+                }
 
-                # Threat
-                "threat_level": threat,
-                "threat_score": random.randint(1, 100),
-                "payload_risk": random.randint(1, 10),
-                "restricted_zone": random.choice([True, False]),
+                try:
+                    result = collection.insert_one(document)
+                    print("Inserted:", drone["drone_id"], result.inserted_id)
+                except Exception as e:
+                    print("Mongo Insert Error:", e)
 
-                # Drone intelligence
-                "drone_type": random.choice([
-                    "Commercial",
-                    "Unknown",
-                    "Military",
-                    "Hobby",
-                    "Autonomous"
-                ]),
+            time.sleep(1)
 
-                # Technical telemetry
-                "signal_strength": random.randint(60, 100),
-                "battery_level": random.randint(20, 100),
+        except Exception as e:
+            print("Simulator Error:", e)
+            time.sleep(2)
 
-                # Security operations
-                "detection_confidence": round(random.uniform(70, 99), 2),
-                "response_time_sec": random.randint(10, 300),
+# ---------------------------
+# Start background thread (SAFE for Render)
+# ---------------------------
+def start_simulator():
+    thread = Thread(target=run_simulator)
+    thread.daemon = True
+    thread.start()
 
-                "intercept_status": random.choice([
-                    "Monitoring",
-                    "Tracking",
-                    "Intercepted",
-                    "Escaped"
-                ])
-            }
+start_simulator()
 
-            # Insert into MongoDB
-            collection.insert_one(document)
-
-            # Print output
-            print(document)
-
-        # Wait 1 second before next update
-        time.sleep(1)
-
-# Start simulator in background thread
-simulator_thread = Thread(target=run_simulator)
-simulator_thread.start()
-
-# Render port binding
+# ---------------------------
+# Render Web Port
+# ---------------------------
 port = int(os.environ.get("PORT", 10000))
-
 app.run(host="0.0.0.0", port=port)
