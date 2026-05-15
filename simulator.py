@@ -3,9 +3,11 @@ from datetime import datetime
 import random
 import time
 import math
+import os
 
 # MongoDB Atlas connection
-MONGO_URI = "mongodb+srv://janaka:Jan123@cluster0.asjsuwa.mongodb.net/?retryWrites=true&w=majority"
+# MONGO_URI = "mongodb+srv://janaka:Jan123@cluster0.asjsuwa.mongodb.net/?retryWrites=true&w=majority"
+MONGO_URI = os.getenv("MONGO_URI")
 
 client = MongoClient(MONGO_URI)
 
