@@ -1,4 +1,5 @@
 from pymongo import MongoClient
+from pymongo.errors import PyMongoError, ServerSelectionTimeoutError
 from datetime import datetime
 import random
 import time
@@ -8,38 +9,40 @@ from flask import Flask
 from threading import Thread
 
 # ---------------------------
-# Flask app (Render requires open port)
+# Flask (Render requires open port)
 # ---------------------------
 app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "Drone simulator running"
+    return "Drone simulator running (PROD SAFE)"
 
 # ---------------------------
-# MongoDB connection
+# MongoDB (PRODUCTION SAFE)
 # ---------------------------
 MONGO_URI = os.getenv("MONGO_URI")
 
-if not MONGO_URI:
-    print("ERROR: MONGO_URI not set")
-
-client = MongoClient(MONGO_URI)
+client = MongoClient(
+    MONGO_URI,
+    serverSelectionTimeoutMS=5000,
+    connectTimeoutMS=5000,
+    retryWrites=True
+)
 
 db = client["drone_monitoring"]
 collection = db["drone_telemetry"]
 
 # ---------------------------
-# Tokyo coordinates
+# CONFIG (production control)
 # ---------------------------
 TOKYO_LAT = 35.6764
 TOKYO_LON = 139.6500
 
-# Reset every 15 minutes
 RESET_INTERVAL = 900
+WRITE_INTERVAL = 2  # IMPORTANT: reduce load (was 1 sec)
 
 # ---------------------------
-# Drone setup
+# DRONES
 # ---------------------------
 def create_initial_drones():
     return [
@@ -49,14 +52,25 @@ def create_initial_drones():
     ]
 
 def calculate_distance(lat1, lon1, lat2, lon2):
-    return math.sqrt((lat2 - lat1) ** 2 + (lon2 - lon1) ** 2) * 111
+    return math.sqrt((lat2 - lat1)**2 + (lon2 - lon1)**2) * 111
 
 # ---------------------------
-# Simulator
+# SAFE INSERT FUNCTION
+# ---------------------------
+def safe_insert(document):
+    try:
+        result = collection.insert_one(document)
+        print("Inserted:", document["drone_id"], result.inserted_id)
+    except (ServerSelectionTimeoutError, PyMongoError) as e:
+        print("MongoDB Insert Failed:", e)
+        time.sleep(2)  # small backoff before retry
+
+# ---------------------------
+# SIMULATOR LOOP (PRODUCTION SAFE)
 # ---------------------------
 def run_simulator():
 
-    print("Simulator started...")
+    print("🚀 Simulator started (production mode)")
 
     drones = create_initial_drones()
     start_time = time.time()
@@ -64,16 +78,16 @@ def run_simulator():
     while True:
 
         try:
-
             # Reset every 15 minutes
             if time.time() - start_time > RESET_INTERVAL:
-                print("Resetting system...")
+                print("♻ Resetting system...")
                 collection.delete_many({})
                 drones = create_initial_drones()
                 start_time = time.time()
 
             for drone in drones:
 
+                # Movement
                 drone["lat"] += (TOKYO_LAT - drone["lat"]) * 0.01
                 drone["lon"] += (TOKYO_LON - drone["lon"]) * 0.01
 
@@ -90,6 +104,7 @@ def run_simulator():
 
                 eta = (distance / drone["speed"]) * 60
 
+                # Threat logic
                 if distance < 20:
                     threat = "Critical"
                 elif distance < 50:
@@ -106,64 +121,48 @@ def run_simulator():
                     "latitude": round(drone["lat"], 6),
                     "longitude": round(drone["lon"], 6),
 
-                    "city_target": random.choice(["Tokyo", "Osaka", "Yokohama"]),
-
                     "speed_kmh": round(drone["speed"], 2),
                     "altitude_m": random.randint(100, 1200),
+
                     "distance_to_tokyo_km": round(distance, 2),
                     "eta_minutes": round(eta, 2),
 
                     "threat_level": threat,
                     "threat_score": random.randint(1, 100),
-                    "payload_risk": random.randint(1, 10),
-                    "restricted_zone": random.choice([True, False]),
 
                     "drone_type": random.choice([
-                        "Commercial",
-                        "Unknown",
-                        "Military",
-                        "Hobby",
-                        "Autonomous"
+                        "Commercial", "Unknown", "Military",
+                        "Hobby", "Autonomous"
                     ]),
 
                     "signal_strength": random.randint(60, 100),
                     "battery_level": random.randint(20, 100),
 
-                    "detection_confidence": round(random.uniform(70, 99), 2),
-                    "response_time_sec": random.randint(10, 300),
-
+                    "restricted_zone": random.choice([True, False]),
                     "intercept_status": random.choice([
-                        "Monitoring",
-                        "Tracking",
-                        "Intercepted",
-                        "Escaped"
+                        "Monitoring", "Tracking", "Intercepted", "Escaped"
                     ])
                 }
 
-                try:
-                    result = collection.insert_one(document)
-                    print("Inserted:", drone["drone_id"], result.inserted_id)
-                except Exception as e:
-                    print("Mongo Insert Error:", e)
+                safe_insert(document)
 
-            time.sleep(1)
+            time.sleep(WRITE_INTERVAL)
 
         except Exception as e:
-            print("Simulator Error:", e)
-            time.sleep(2)
+            print("SIMULATOR LOOP ERROR:", e)
+            time.sleep(3)
 
 # ---------------------------
-# Start background thread (SAFE for Render)
+# BACKGROUND START (RENDER SAFE)
 # ---------------------------
 def start_simulator():
-    thread = Thread(target=run_simulator)
-    thread.daemon = True
+    thread = Thread(target=run_simulator, daemon=True)
     thread.start()
 
 start_simulator()
 
 # ---------------------------
-# Render Web Port
+# RENDER WEB SERVICE
 # ---------------------------
 port = int(os.environ.get("PORT", 10000))
 app.run(host="0.0.0.0", port=port)
