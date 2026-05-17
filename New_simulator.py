@@ -10,7 +10,7 @@ MONGO_URI = os.getenv("MONGO_URI")
 client = MongoClient(MONGO_URI)
 
 db = client["drone_monitoring"]
-collection = db["drone_telemetry"]
+collection = db["drone_telemetry1"]
 
 # Tokyo coordinates
 TOKYO_LAT = 35.6764
