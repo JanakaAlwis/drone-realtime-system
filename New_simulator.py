@@ -30,7 +30,7 @@ def calculate_distance(lat1, lon1, lat2, lon2):
 print("Simulation started")
 
 # INSERT 10 RECORDS
-for i in range(40):
+for i in range(10):
 
     drone = random.choice(drones)
 
