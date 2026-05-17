@@ -25,4 +25,4 @@ jobs:
       - name: Run Simulator
         env:
           MONGO_URI: ${{ secrets.MONGO_URI }}
-        run: python python New_simulator.py
+        run: python New_simulator.py
