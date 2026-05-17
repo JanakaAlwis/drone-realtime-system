@@ -4,7 +4,7 @@ import random
 import math
 import os
 
-# MongoDB Atlas connection
+# MongoDB connection
 MONGO_URI = os.getenv("MONGO_URI")
 
 client = MongoClient(MONGO_URI)
@@ -18,56 +18,36 @@ TOKYO_LON = 139.6500
 
 # Initial drones
 drones = [
-    {
-        "drone_id": "DR001",
-        "lat": 36.5000,
-        "lon": 141.2000,
-        "speed": 120
-    },
-    {
-        "drone_id": "DR002",
-        "lat": 35.9000,
-        "lon": 140.8000,
-        "speed": 100
-    },
-    {
-        "drone_id": "DR003",
-        "lat": 36.1000,
-        "lon": 140.3000,
-        "speed": 140
-    }
+    {"drone_id": "DR001"},
+    {"drone_id": "DR002"},
+    {"drone_id": "DR003"}
 ]
 
 # Distance calculation
 def calculate_distance(lat1, lon1, lat2, lon2):
     return math.sqrt((lat2 - lat1) ** 2 + (lon2 - lon1) ** 2) * 111
 
-print("Drone simulation started...")
+print("Simulation started")
 
-# Generate ONE telemetry batch
-for drone in drones:
+# INSERT 10 RECORDS
+for i in range(10):
 
-    # Move drone toward Tokyo
-    drone["lat"] += random.uniform(-0.05, 0.05)
-    drone["lon"] += random.uniform(-0.05, 0.05)
+    drone = random.choice(drones)
 
-    # Random speed variation
-    drone["speed"] += random.uniform(-5, 5)
+    latitude = round(random.uniform(35.5, 36.5), 6)
+    longitude = round(random.uniform(139.5, 141.5), 6)
 
-    # Prevent negative speed
-    if drone["speed"] < 50:
-        drone["speed"] = 50
+    speed = round(random.uniform(80, 180), 2)
 
     distance = calculate_distance(
-        drone["lat"],
-        drone["lon"],
+        latitude,
+        longitude,
         TOKYO_LAT,
         TOKYO_LON
     )
 
-    eta = (distance / drone["speed"]) * 60
+    eta = round((distance / speed) * 60, 2)
 
-    # Threat level logic
     threat = "Low"
 
     if distance < 20:
@@ -77,33 +57,33 @@ for drone in drones:
     elif distance < 100:
         threat = "Medium"
 
-    # Create telemetry document
     document = {
+
         "drone_id": drone["drone_id"],
         "timestamp": datetime.now(UTC),
 
-        # Location
-        "latitude": round(drone["lat"], 6),
-        "longitude": round(drone["lon"], 6),
+        "latitude": latitude,
+        "longitude": longitude,
+
         "city_target": random.choice([
             "Tokyo",
             "Osaka",
             "Yokohama"
         ]),
 
-        # Movement
-        "speed_kmh": round(drone["speed"], 2),
+        "speed_kmh": speed,
         "altitude_m": random.randint(100, 1200),
-        "distance_to_tokyo_km": round(distance, 2),
-        "eta_minutes": round(eta, 2),
 
-        # Threat
+        "distance_to_tokyo_km": round(distance, 2),
+        "eta_minutes": eta,
+
         "threat_level": threat,
         "threat_score": random.randint(1, 100),
+
         "payload_risk": random.randint(1, 10),
+
         "restricted_zone": random.choice([True, False]),
 
-        # Drone intelligence
         "drone_type": random.choice([
             "Commercial",
             "Unknown",
@@ -112,12 +92,11 @@ for drone in drones:
             "Autonomous"
         ]),
 
-        # Technical telemetry
         "signal_strength": random.randint(60, 100),
         "battery_level": random.randint(20, 100),
 
-        # Security operations
         "detection_confidence": round(random.uniform(70, 99), 2),
+
         "response_time_sec": random.randint(10, 300),
 
         "intercept_status": random.choice([
@@ -128,9 +107,8 @@ for drone in drones:
         ])
     }
 
-    # Insert into MongoDB
     collection.insert_one(document)
 
-    print("Inserted:", document["drone_id"])
+    print(f"Inserted record {i+1}")
 
-print("Simulation completed.")
+print("Simulation completed")

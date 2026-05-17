@@ -2,7 +2,7 @@ name: Drone Telemetry Simulator
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "* * * * *"
 
   workflow_dispatch:
 
